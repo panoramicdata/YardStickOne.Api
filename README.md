@@ -2,7 +2,7 @@
 
 A .NET library for controlling the [Great Scott Gadgets YARD Stick One](https://greatscottgadgets.com/YardStickOne/) software-defined radio via USB.
 
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/TODO)](https://app.codacy.com/gh/panoramicdata/YardStickOne.Api/dashboard)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/e3cdd93e8658432e81b6b343ff8c6c39)](https://app.codacy.com/gh/panoramicdata/YardStickOne.Api/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![NuGet](https://img.shields.io/nuget/v/YardStickOne.Api)](https://www.nuget.org/packages/YardStickOne.Api)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
