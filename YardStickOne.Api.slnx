@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="YardStickOne.Api\YardStickOne.Api.csproj" />
+  <Project Path="YardStickOne.Api.Tests\YardStickOne.Api.Tests.csproj" />
+  <Project Path="YardStickOne.Demo\YardStickOne.Demo.csproj" />
+</Solution>
