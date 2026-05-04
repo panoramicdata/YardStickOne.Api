@@ -26,12 +26,7 @@ Provide a clean, testable .NET 10 library for recording and replaying RF signals
 - [x] `PLAN.md` created (this file)
 - [x] `DESIGN.md` created
 - [x] Initial commit to GitHub (public repo)
-
----
-
-## In progress
-
-- [ ] Codacy integration — awaiting user to add repo slug and update the badge URL in `README.md`
+- [x] Codacy badge updated with real slug
 
 ---
 
