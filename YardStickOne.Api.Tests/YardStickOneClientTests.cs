@@ -35,18 +35,21 @@ public sealed class YardStickOneClientTests
 	}
 
 	[Fact]
-	public async Task ConfigureAsync_SendsThreeCommands()
+	public async Task ConfigureAsync_SendsPingThenConfigurationCommands()
 	{
 		using var transport = new FakeUsbTransport();
 		using var client = CreateClient(transport);
 
 		await client.ConfigureAsync(433_920_000, Modulation.AskOok, 4800);
 
-		// Expect SetFreq, SetModulation, SetBaudRate
-		transport.SentCommands.Should().HaveCount(3);
-		transport.SentCommands[0].Command.Should().Be(RfCatCommands.SetFreq);
-		transport.SentCommands[1].Command.Should().Be(RfCatCommands.SetModulation);
-		transport.SentCommands[2].Command.Should().Be(RfCatCommands.SetBaudRate);
+		// Expect Ping, SetFreq, SetModulation, SetBaudRate, SetSyncMode, SetInfinitePkt
+		transport.SentCommands.Should().HaveCount(6);
+		transport.SentCommands[0].Command.Should().Be(RfCatCommands.Ping);
+		transport.SentCommands[1].Command.Should().Be(RfCatCommands.SetFreq);
+		transport.SentCommands[2].Command.Should().Be(RfCatCommands.SetModulation);
+		transport.SentCommands[3].Command.Should().Be(RfCatCommands.SetBaudRate);
+		transport.SentCommands[4].Command.Should().Be(RfCatCommands.SetSyncMode);
+		transport.SentCommands[5].Command.Should().Be(RfCatCommands.SetInfinitePkt);
 	}
 
 	[Fact]
@@ -73,7 +76,8 @@ public sealed class YardStickOneClientTests
 
 		signal.Data.Should().BeEquivalentTo(new byte[] { 0x01, 0x02, 0x03 });
 		transport.SentCommands[0].Command.Should().Be(RfCatCommands.RxMode);
-		transport.SentCommands[1].Command.Should().Be(RfCatCommands.IdleMode);
+		transport.SentCommands.Should().Contain(c => c.Command == RfCatCommands.RecvData);
+		transport.SentCommands[^1].Command.Should().Be(RfCatCommands.IdleMode);
 	}
 
 	[Fact]

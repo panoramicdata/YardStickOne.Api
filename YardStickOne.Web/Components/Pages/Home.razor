@@ -1,0 +1,280 @@
+@page "/"
+@rendermode InteractiveServer
+@using YardStickOne.Api.Models
+@using YardStickOne.Web.Services
+@inject CaptureService Capture
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>YardStickOne Oscilloscope</PageTitle>
+
+<div class="toolbar">
+    <span class="toolbar-title">YARD Stick One — Oscilloscope</span>
+
+    <div class="toolbar-group">
+        <label>Freq (MHz)
+            <input type="number" step="0.01" min="300" max="928"
+                   @bind="_freqMhz" disabled="@(_capturing || _startInProgress)" />
+        </label>
+        <label>Baud
+            <input type="number" step="100" min="100" max="250000"
+                   @bind="_baudRate" disabled="@(_capturing || _startInProgress)" />
+        </label>
+        <label>Mod
+            <select @bind="_modulation" disabled="@(_capturing || _startInProgress)">
+                <option value="@((byte)Modulation.AskOok)">OOK / ASK</option>
+                <option value="@((byte)Modulation.FSK2)">FSK2</option>
+                <option value="@((byte)Modulation.GFSK)">GFSK</option>
+                <option value="@((byte)Modulation.FSK4)">4-FSK</option>
+                <option value="@((byte)Modulation.MSK)">MSK</option>
+            </select>
+        </label>
+    </div>
+
+    <div class="toolbar-group">
+        @if (!_capturing)
+        {
+            <button class="btn btn-start" @onclick="StartCaptureAsync" disabled="@_startInProgress">▶ Start</button>
+        }
+        else
+        {
+            <button class="btn btn-stop" @onclick="StopCaptureAsync">■ Stop</button>
+        }
+        <button class="btn" @onclick="ClearAsync">✕ Clear</button>
+    </div>
+
+    <div class="toolbar-group">
+        <button class="btn btn-play" @onclick="PlaybackSelectionAsync"
+                disabled="@(!_hasSelection || !_capturing)">
+            ↻ Play Selection
+        </button>
+        <button class="btn btn-save" @onclick="ShowSaveDialogAsync" disabled="@(!_hasSelection)">
+            💾 Save Selection
+        </button>
+    </div>
+
+    @if (_statusMessage is not null)
+    {
+        <span class="status-msg">@_statusMessage</span>
+    }
+</div>
+
+<div class="osc-container">
+    <div class="osc-main">
+        <canvas id="oscCanvas" @ref="_canvas"></canvas>
+    </div>
+    <div class="osc-sidebar">
+        <div class="sidebar-header">
+            <span>RF Bursts</span>
+            <span id="burstBaudInfo" class="sidebar-baud"></span>
+        </div>
+        <div id="burstList" class="burst-list">
+            <div class="burst-empty">No bursts detected yet.</div>
+        </div>
+    </div>
+</div>
+
+@if (_showSaveDialog)
+{
+    <div class="modal-backdrop">
+        <div class="modal">
+            <h3>Save Selection</h3>
+            <label>Name: <input @bind="_saveName" @bind:event="oninput" placeholder="e.g. Blind Up" /></label>
+            <div class="modal-buttons">
+                <button class="btn btn-save" @onclick="SaveSelectionAsync"
+                        disabled="@(string.IsNullOrWhiteSpace(_saveName))">Save</button>
+                <button class="btn" @onclick="() => _showSaveDialog = false">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private ElementReference _canvas;
+    private IJSObjectReference? _osc;
+    private DotNetObjectReference<Home>? _selfRef;
+
+    // Toolbar state
+    private double _freqMhz    = 433.92;
+    private uint   _baudRate   = 4800;
+    private byte   _modulation = (byte)Modulation.AskOok;
+    private bool   _capturing;
+    private bool   _startInProgress;
+    private string? _statusMessage;
+
+    // Selection / save state
+    private bool   _hasSelection;
+    private bool   _showSaveDialog;
+    private string _saveName = string.Empty;
+    private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(12);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        Capture.CaptureFaulted += OnCaptureFaulted;
+
+        _selfRef = DotNetObjectReference.Create(this);
+        _osc = await JS.InvokeAsync<IJSObjectReference>(
+            "import", "./js/oscilloscope.js");
+
+        await _osc.InvokeVoidAsync("init", _canvas, _selfRef);
+    }
+
+    private async Task StartCaptureAsync()
+    {
+        if (_capturing || _startInProgress)
+            return;
+
+        _startInProgress = true;
+        _statusMessage = null;
+        try
+        {
+            var mod = (Modulation)_modulation;
+            using var cts = new CancellationTokenSource(StartTimeout);
+            await Capture.StartAsync(_freqMhz * 1_000_000, mod, _baudRate, cts.Token);
+
+            // Register a callback so the JS oscilloscope can fetch new chunks.
+            // We use a JS SignalR connection so data bypasses the Blazor circuit for throughput.
+            await _osc!.InvokeVoidAsync("connectHub", "/oscHub");
+            await _osc!.InvokeVoidAsync("setBaudRate", _baudRate);
+            _capturing = true;
+            _statusMessage = "Capture running.";
+        }
+        catch (OperationCanceledException)
+        {
+            _capturing = false;
+            _statusMessage = "Failed to start: device startup timed out.";
+            try
+            {
+                await Capture.StopAsync();
+            }
+            catch
+            {
+                // Best effort cleanup.
+            }
+        }
+        catch (Exception ex)
+        {
+            _capturing = false;
+            _statusMessage = $"Failed to start: {ex.Message}";
+        }
+        finally
+        {
+            _startInProgress = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task StopCaptureAsync()
+    {
+        await Capture.StopAsync();
+        if (_osc is not null)
+            await _osc.InvokeVoidAsync("disconnectHub");
+        _capturing = false;
+        _statusMessage = "Capture stopped.";
+        StateHasChanged();
+    }
+
+    private async Task ClearAsync()
+    {
+        if (_osc is not null)
+            await _osc.InvokeVoidAsync("clear");
+        _hasSelection = false;
+        StateHasChanged();
+    }
+
+    private async Task PlaybackSelectionAsync()
+    {
+        if (_osc is null) return;
+        var data = await _osc.InvokeAsync<byte[]>("getSelectionData");
+        if (data is { Length: > 0 })
+        {
+            try
+            {
+                await Capture.TransmitAsync(data);
+                _statusMessage = $"Transmitted {data.Length} bytes.";
+            }
+            catch (Exception ex)
+            {
+                _statusMessage = $"Transmit failed: {ex.Message}";
+            }
+            StateHasChanged();
+        }
+    }
+
+    private Task ShowSaveDialogAsync()
+    {
+        _saveName        = string.Empty;
+        _showSaveDialog  = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveSelectionAsync()
+    {
+        if (_osc is null || string.IsNullOrWhiteSpace(_saveName)) return;
+        var data = await _osc.InvokeAsync<byte[]>("getSelectionData");
+        if (data is { Length: > 0 })
+        {
+            var signal = new YardStickOne.Api.Models.RfSignal
+            {
+                FrequencyHz = Capture.FrequencyHz,
+                Modulation  = Capture.Modulation,
+                BaudRate    = Capture.BaudRate,
+                Data        = data,
+                CapturedAt  = DateTimeOffset.UtcNow,
+            };
+            await SavedCaptures.SaveAsync(_saveName, signal);
+            _statusMessage  = $"Saved '{_saveName}'.";
+            _showSaveDialog = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>Called from JS when the user makes or clears a selection.</summary>
+    [JSInvokable]
+    public void OnSelectionChanged(bool hasSelection)
+    {
+        _hasSelection = hasSelection;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnCaptureFaulted(string message)
+    {
+        _capturing = false;
+        _startInProgress = false;
+        _statusMessage = $"Capture failed: {message}";
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Capture.CaptureFaulted -= OnCaptureFaulted;
+
+        if (_capturing)
+            await Capture.StopAsync();
+
+        if (_osc is not null)
+        {
+            try
+            {
+                await _osc.InvokeVoidAsync("dispose");
+            }
+            catch (JSDisconnectedException)
+            {
+                // Circuit already disconnected during navigation/refresh.
+            }
+
+            try
+            {
+                await _osc.DisposeAsync();
+            }
+            catch (Exception)
+            {
+                // Circuit already disconnected during navigation/refresh.
+            }
+        }
+
+        _selfRef?.Dispose();
+    }
+}

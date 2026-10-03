@@ -5,13 +5,14 @@
 internal static class RfCatCommands
 {
 	// --- Radio configuration ---
-	internal const byte SetFreq = 0x30;
+	internal const byte SetFreq       = 0x30;
 	internal const byte SetModulation = 0x31;
-	internal const byte SetBaudRate = 0x32;
-	internal const byte SetSyncWord = 0x33;
-	internal const byte SetSyncMode = 0x34;
-	internal const byte SetMaxPower = 0x35;
-	internal const byte SetRxFilter = 0x36;
+	internal const byte SetBaudRate   = 0x32;
+	internal const byte SetSyncWord   = 0x33;
+	internal const byte SetSyncMode   = 0x34;   // MDMCFG2 sync_mode bits (0 = no preamble/sync)
+	internal const byte SetMaxPower   = 0x35;
+	internal const byte SetRxFilter   = 0x36;
+	internal const byte SetInfinitePkt = 0x37;  // PKTCTRL0 LENGTH_CONFIG = 10 (infinite/raw stream)
 
 	// --- RX / TX ---
 	internal const byte RxMode = 0x40;

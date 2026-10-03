@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using YardStickOne.Api.Exceptions;
@@ -12,6 +13,8 @@ namespace YardStickOne.Api;
 /// </summary>
 public sealed partial class YardStickOneClient : IYardStickOneClient
 {
+private const int PingRetryCount = 3;
+
 private readonly IUsbTransport _transport;
 private readonly YardStickOneClientOptions _options;
 private readonly ILogger<YardStickOneClient> _logger;
@@ -51,7 +54,7 @@ IUsbTransport? transport)
 {
 _options = options;
 _logger = logger;
-_transport = transport ?? LibUsbTransport.Open(options, logger);
+_transport = transport ?? WinUsbTransport.Open(options, logger);
 
 FrequencyHz = options.DefaultFrequencyHz;
 Modulation = options.DefaultModulation;
@@ -69,13 +72,48 @@ ObjectDisposedException.ThrowIf(_disposed, this);
 
 LogConfiguring(_logger, frequencyHz / 1_000_000, modulation, baudRate);
 
-await SetFrequencyAsync(frequencyHz, cancellationToken).ConfigureAwait(false);
-await SetModulationAsync(modulation, cancellationToken).ConfigureAwait(false);
-await SetBaudRateAsync(baudRate, cancellationToken).ConfigureAwait(false);
+	// Ping with retries: after abrupt stop/start cycles the firmware may still be
+	// draining RX state, causing a transient timeout on the first attempt.
+	for (var attempt = 1; ; attempt++)
+	{
+		try
+		{
+			await _transport.SendCommandAsync(RfCatCommands.Ping, cancellationToken: cancellationToken)
+				.ConfigureAwait(false);
+			break;
+		}
+		catch (YardStickOneCommandException ex)
+			when (attempt < PingRetryCount && IsPingTimeout(ex))
+		{
+			try
+			{
+				await _transport.SendCommandAsync(RfCatCommands.IdleMode, cancellationToken: cancellationToken)
+					.ConfigureAwait(false);
+			}
+			catch
+			{
+				// Best effort recovery only.
+			}
 
-FrequencyHz = frequencyHz;
-Modulation = modulation;
-BaudRate = baudRate;
+			await Task.Delay(200, cancellationToken).ConfigureAwait(false);
+		}
+	}
+
+	await SetFrequencyAsync(frequencyHz, cancellationToken).ConfigureAwait(false);
+	await SetModulationAsync(modulation, cancellationToken).ConfigureAwait(false);
+	await SetBaudRateAsync(baudRate, cancellationToken).ConfigureAwait(false);
+
+	// Disable sync-word detection and enable infinite packet length so the
+	// CC1111 streams raw RF bytes continuously rather than waiting for a
+	// matching preamble+sync packet. This is what rfcat's lowball() mode does.
+	await _transport.SendCommandAsync(RfCatCommands.SetSyncMode, [0x00], cancellationToken)
+		.ConfigureAwait(false);
+	await _transport.SendCommandAsync(RfCatCommands.SetInfinitePkt, cancellationToken: cancellationToken)
+		.ConfigureAwait(false);
+
+	FrequencyHz = frequencyHz;
+	Modulation  = modulation;
+	BaudRate    = baudRate;
 }
 
 /// <inheritdoc/>
@@ -92,8 +130,24 @@ await _transport.SendCommandAsync(RfCatCommands.RxMode, cancellationToken: cance
 using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 timeoutCts.CancelAfter(_options.ReceiveTimeout);
 
-// Poll for data
-var data = await _transport.ReadResponseAsync(512, timeoutCts.Token).ConfigureAwait(false);
+	byte[] data;
+	while (true)
+	{
+		timeoutCts.Token.ThrowIfCancellationRequested();
+
+		// Ask firmware to flush available RX bytes back over USB.
+		await _transport.SendCommandAsync(RfCatCommands.RecvData, cancellationToken: timeoutCts.Token)
+			.ConfigureAwait(false);
+
+		data = await _transport.ReadResponseAsync(512, timeoutCts.Token).ConfigureAwait(false);
+
+		// NIC_RECV commonly returns a 1-byte status when no RF payload is queued.
+		// Treat empty/status-only responses as "no capture yet" and keep listening.
+		if (data.Length > 1)
+			break;
+
+		await Task.Delay(20, timeoutCts.Token).ConfigureAwait(false);
+	}
 
 // Return to idle
 await _transport.SendCommandAsync(RfCatCommands.IdleMode, cancellationToken: cancellationToken)
@@ -145,9 +199,62 @@ LogTransmissionComplete(_logger);
 /// <inheritdoc/>
 public Task ResetAsync(CancellationToken cancellationToken = default)
 {
-ObjectDisposedException.ThrowIf(_disposed, this);
-LogResetting(_logger);
-return _transport.SendCommandAsync(RfCatCommands.Reset, cancellationToken: cancellationToken);
+	ObjectDisposedException.ThrowIf(_disposed, this);
+	LogResetting(_logger);
+	return _transport.SendCommandAsync(RfCatCommands.Reset, cancellationToken: cancellationToken);
+}
+
+/// <inheritdoc/>
+public async IAsyncEnumerable<RfSignal> StreamAsync(
+	[EnumeratorCancellation] CancellationToken cancellationToken = default)
+{
+	ObjectDisposedException.ThrowIf(_disposed, this);
+
+	// Enter RX mode once; stay there until the caller cancels.
+	await _transport.SendCommandAsync(RfCatCommands.RxMode, cancellationToken: cancellationToken)
+		.ConfigureAwait(false);
+
+	try
+	{
+		while (!cancellationToken.IsCancellationRequested)
+		{
+			// In streaming RX mode the firmware pushes frames spontaneously on the IN pipe.
+			// Do NOT send a NicRecv OUT command — the device will ignore / reject it while streaming.
+			var data = await _transport
+				.PollIncomingFrameAsync(cancellationToken)
+				.ConfigureAwait(false);
+
+			if (data.Length > 1)
+			{
+				yield return new RfSignal
+				{
+					FrequencyHz = FrequencyHz,
+					Modulation  = Modulation,
+					BaudRate    = BaudRate,
+					Data        = data,
+					CapturedAt  = DateTimeOffset.UtcNow,
+				};
+			}
+			else
+			{
+				await Task.Delay(10, cancellationToken).ConfigureAwait(false);
+			}
+		}
+	}
+	finally
+	{
+		// Best-effort: return to idle even if the USB write fails.
+		try
+		{
+			await _transport
+				.SendCommandAsync(RfCatCommands.IdleMode, cancellationToken: CancellationToken.None)
+				.ConfigureAwait(false);
+		}
+		catch (Exception ex)
+		{
+			LogIdleOnStreamStopFailed(_logger, ex);
+		}
+	}
 }
 
 // ----- Private helpers -----
@@ -165,6 +272,9 @@ var payload = new byte[]
 return _transport.SendCommandAsync(RfCatCommands.SetFreq, payload, cancellationToken);
 }
 
+private static bool IsPingTimeout(YardStickOneCommandException ex)
+	=> ex.Message.Contains("Timeout waiting for response app=0xFF cmd=0x82", StringComparison.Ordinal);
+
 private Task SetModulationAsync(Modulation modulation, CancellationToken cancellationToken)
 => _transport.SendCommandAsync(RfCatCommands.SetModulation, [(byte)modulation], cancellationToken);
 
@@ -175,6 +285,13 @@ if (BitConverter.IsLittleEndian)
 Array.Reverse(payload);
 return _transport.SendCommandAsync(RfCatCommands.SetBaudRate, payload, cancellationToken);
 }
+
+/// <summary>
+/// Returns the device paths of all USB devices currently visible to the OS.
+/// Useful for diagnostics when a device cannot be opened.
+/// </summary>
+public static IReadOnlyList<string> EnumerateAllUsbDevicePaths()
+	=> WinUsbTransport.EnumerateAllDevicePaths();
 
 /// <inheritdoc/>
 public void Dispose()
@@ -191,7 +308,7 @@ private static partial void LogConfiguring(ILogger logger, double freqMHz, Modul
 [LoggerMessage(Level = LogLevel.Information, Message = "Starting receive at {FreqMHz:F4} MHz ({Mod}, {Baud} baud)...")]
 private static partial void LogStartingReceive(ILogger logger, double freqMHz, Modulation mod, uint baud);
 
-[LoggerMessage(Level = LogLevel.Information, Message = "Received {Bytes} bytes.")]
+[LoggerMessage(Level = LogLevel.Debug, Message = "Received {Bytes} bytes.")]
 private static partial void LogReceived(ILogger logger, int bytes);
 
 [LoggerMessage(Level = LogLevel.Information, Message = "Transmitting {Bytes} bytes at {FreqMHz:F4} MHz ({Mod}, {Baud} baud)...")]
@@ -202,4 +319,7 @@ private static partial void LogTransmissionComplete(ILogger logger);
 
 [LoggerMessage(Level = LogLevel.Information, Message = "Resetting YARD Stick One...")]
 private static partial void LogResetting(ILogger logger);
+
+[LoggerMessage(Level = LogLevel.Warning, Message = "Failed to send IdleMode after StreamAsync cancelled.")]
+private static partial void LogIdleOnStreamStopFailed(ILogger logger, Exception ex);
 }

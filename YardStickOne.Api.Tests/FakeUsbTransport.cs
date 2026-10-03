@@ -35,5 +35,14 @@ internal sealed class FakeUsbTransport : IUsbTransport
 	}
 
 	/// <inheritdoc/>
+	public Task<byte[]> PollIncomingFrameAsync(CancellationToken cancellationToken = default)
+	{
+		if (_responses.TryDequeue(out var data))
+			return Task.FromResult(data);
+
+		return Task.FromResult(Array.Empty<byte>());
+	}
+
+	/// <inheritdoc/>
 	public void Dispose() => IsDisposed = true;
 }

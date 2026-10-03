@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using YardStickOne.Api.Models;
 
 namespace YardStickOne.Api;
@@ -61,4 +62,11 @@ public interface IYardStickOneClient : IDisposable
 	/// </summary>
 	/// <param name="cancellationToken">Cancellation token.</param>
 	Task ResetAsync(CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Continuously streams raw RF samples, keeping the radio in RX mode until the token is cancelled.
+	/// Each yielded <see cref="RfSignal"/> contains one FIFO burst from the CC1111.
+	/// </summary>
+	/// <param name="cancellationToken">Cancellation token — cancel to stop the stream and return to idle.</param>
+	IAsyncEnumerable<RfSignal> StreamAsync(CancellationToken cancellationToken = default);
 }
