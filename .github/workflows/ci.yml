@@ -30,7 +30,7 @@ jobs:
       # Unit tests use FakeUsbTransport only, so they need no YARD Stick One hardware
       # or credentials and are safe to run in CI.
       - name: Test
-        run: dotnet test YardStickOne.Api.Tests/YardStickOne.Api.Tests.csproj --no-build --configuration Release
+        run: dotnet test --project YardStickOne.Api.Tests/YardStickOne.Api.Tests.csproj --no-build --configuration Release
 
       - name: Pack
         run: dotnet pack YardStickOne.Api/YardStickOne.Api.csproj --no-build --configuration Release --output ./artifacts
