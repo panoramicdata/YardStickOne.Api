@@ -30,7 +30,35 @@ jobs:
       # Unit tests use FakeUsbTransport only, so they need no YARD Stick One hardware
       # or credentials and are safe to run in CI.
       - name: Test
-        run: dotnet test --project YardStickOne.Api.Tests/YardStickOne.Api.Tests.csproj --no-build --configuration Release
+        run: >-
+          dotnet test --project YardStickOne.Api.Tests/YardStickOne.Api.Tests.csproj
+          --no-build --configuration Release
+          --coverage --coverage-output-format cobertura --coverage-output coverage.cobertura.xml
+
+      # The secrets context cannot be tested in a step `if`, so this step turns its presence
+      # into an output. Fork pull requests have no secret and skip the upload.
+      - name: Check for Codacy token
+        id: codacy
+        env:
+          CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+        run: |
+          if [ -n "$CODACY_PROJECT_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # continue-on-error: a Codacy outage must not turn a passing test run red. The trade-off
+      # is that an expired token fails silently (it expires 2027-10-11), so check the step log
+      # for "Coverage received successfully".
+      - name: Upload coverage to Codacy
+        if: steps.codacy.outputs.enabled == 'true'
+        continue-on-error: true
+        # Pinned to the commit of v1.3.0.
+        uses: codacy/codacy-coverage-reporter-action@89d6c85cfafaec52c72b6c5e8b2878d33104c699
+        with:
+          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+          coverage-reports: '**/coverage.cobertura.xml'
 
       - name: Pack
         run: dotnet pack YardStickOne.Api/YardStickOne.Api.csproj --no-build --configuration Release --output ./artifacts
