@@ -21,6 +21,7 @@
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
+    <NeutralResourcesLanguage>en</NeutralResourcesLanguage>
   </PropertyGroup>
   <ItemGroup>
     <None Include="../README.md" Pack="true" PackagePath="" />
