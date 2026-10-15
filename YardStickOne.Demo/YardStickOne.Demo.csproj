@@ -8,6 +8,7 @@
     <NoWarn>$(NoWarn);CA1303;CA1305;CA1848</NoWarn>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
+    <NeutralResourcesLanguage>en</NeutralResourcesLanguage>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="AsyncFixer">
