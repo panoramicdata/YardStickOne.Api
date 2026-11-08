@@ -144,7 +144,9 @@ public sealed partial class YardStickOneClient : IYardStickOneClient
 			// NIC_RECV commonly returns a 1-byte status when no RF payload is queued.
 			// Treat empty/status-only responses as "no capture yet" and keep listening.
 			if (data.Length > 1)
+			{
 				break;
+			}
 
 			await Task.Delay(20, timeoutCts.Token).ConfigureAwait(false);
 		}
@@ -282,7 +284,10 @@ public sealed partial class YardStickOneClient : IYardStickOneClient
 	{
 		var payload = BitConverter.GetBytes(baudRate);
 		if (BitConverter.IsLittleEndian)
+		{
 			Array.Reverse(payload);
+		}
+
 		return _transport.SendCommandAsync(RfCatCommands.SetBaudRate, payload, cancellationToken);
 	}
 
@@ -297,7 +302,10 @@ public sealed partial class YardStickOneClient : IYardStickOneClient
 	public void Dispose()
 	{
 		if (_disposed)
+		{
 			return;
+		}
+
 		_disposed = true;
 		_transport.Dispose();
 	}

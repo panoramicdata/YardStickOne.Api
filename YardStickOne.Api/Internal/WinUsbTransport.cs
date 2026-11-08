@@ -89,7 +89,9 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 		IntPtr.Zero);
 
 		if (deviceHandle.IsInvalid)
+		{
 			throw new YardStickOneNotFoundException();
+		}
 
 		if (!WinUsbNative.WinUsb_Initialize(deviceHandle, out var winUsbHandle))
 		{
@@ -138,7 +140,9 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 		foreach (var path in EnumerateAllDevicePaths())
 		{
 			if (path.Contains(needle, StringComparison.OrdinalIgnoreCase))
+			{
 				return path;
+			}
 		}
 
 		return null;
@@ -155,7 +159,9 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 		WinUsbNative.DIGCF_PRESENT | WinUsbNative.DIGCF_DEVICEINTERFACE);
 
 		if (devInfo == new IntPtr(-1))
+		{
 			return results;
+		}
 
 		try
 		{
@@ -172,7 +178,9 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 				devInfo, ref ifaceData, IntPtr.Zero, 0, out var requiredSize, IntPtr.Zero);
 
 				if (requiredSize == 0)
+				{
 					continue;
+				}
 
 				var buffer = Marshal.AllocHGlobal((int)requiredSize);
 				try
@@ -181,11 +189,15 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 
 					if (!WinUsbNative.SetupDiGetDeviceInterfaceDetail(
 					devInfo, ref ifaceData, buffer, requiredSize, out _, IntPtr.Zero))
+					{
 						continue;
+					}
 
 					var path = Marshal.PtrToStringUni(buffer + 4);
 					if (!string.IsNullOrEmpty(path))
+					{
 						results.Add(path);
+					}
 				}
 				finally
 				{
@@ -221,7 +233,9 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 				var data = _pendingResponse;
 				_pendingResponse = [];
 				if (data.Length <= maxLength)
+				{
 					return data;
+				}
 
 				var truncated = new byte[maxLength];
 				Array.Copy(data, truncated, maxLength);
@@ -242,7 +256,9 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 		// Read one chunk from the IN pipe (returns empty on timeout — no hard error).
 		var chunk = ReadPipeRaw(allowTimeout: true);
 		if (chunk.Length == 0)
+		{
 			return [];
+		}
 
 		_recvBuffer.AddRange(chunk);
 
@@ -250,7 +266,9 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 		while (TryDequeueFrame(out var app, out var cmd, out var payload))
 		{
 			if (app == AppNic && cmd == NicRecv)
+			{
 				return payload;
+			}
 			// Discard any other spontaneous frames (e.g. system status).
 		}
 
@@ -270,13 +288,19 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 
 			case RfCatCommands.SetFreq:
 				if (payload.Length != 3)
+				{
 					throw new YardStickOneCommandException("SetFreq expects 3-byte payload.");
+				}
+
 				WriteRegisterBlock(RegFreq2, payload);
 				return;
 
 			case RfCatCommands.SetModulation:
 				if (payload.Length != 1)
+				{
 					throw new YardStickOneCommandException("SetModulation expects 1-byte payload.");
+				}
+
 				var mdmcfg2 = ReadRegister(RegMdmcfg2);
 				var modulation = (byte)(payload[0] & 0x70);
 				var newMdmcfg2 = (byte)((mdmcfg2 & 0x8F) | modulation);
@@ -285,7 +309,10 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 
 			case RfCatCommands.SetBaudRate:
 				if (payload.Length != 4)
+				{
 					throw new YardStickOneCommandException("SetBaudRate expects 4-byte payload.");
+				}
+
 				var baud = ((uint)payload[0] << 24)
 				| ((uint)payload[1] << 16)
 				| ((uint)payload[2] << 8)
@@ -296,7 +323,10 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 			case RfCatCommands.SetSyncMode:
 				// payload[0] = sync_mode value (0 = no preamble/sync, see CC1111 datasheet MDMCFG2 bits[2:0]).
 				if (payload.Length != 1)
+				{
 					throw new YardStickOneCommandException("SetSyncMode expects 1-byte payload.");
+				}
+
 				var mdmSync = ReadRegister(RegMdmcfg2);
 				WriteRegister(RegMdmcfg2, (byte)((mdmSync & 0xF8) | (payload[0] & 0x07)));
 				return;
@@ -365,7 +395,9 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 		}
 
 		if (drateE < 0)
+		{
 			throw new YardStickOneCommandException($"Baud rate {baud} cannot be represented.");
+		}
 
 		var mdmcfg4 = ReadRegister(RegMdmcfg4);
 		var newMdmcfg4 = (byte)((mdmcfg4 & 0xF0) | (drateE & 0x0F));
@@ -426,8 +458,10 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 		}
 
 		if (transferred != (uint)buffer.Length)
+		{
 			throw new YardStickOneCommandException(
 			$"USB write incomplete: sent {transferred}/{buffer.Length} bytes.");
+		}
 	}
 
 	private byte[] ReadFramedResponse(byte expectedApp, byte expectedCmd, bool allowTimeout)
@@ -439,7 +473,9 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 			if (TryDequeueFrame(out var app, out var cmd, out var payload))
 			{
 				if (app == expectedApp && cmd == expectedCmd)
+				{
 					return payload;
+				}
 
 				continue;
 			}
@@ -448,11 +484,15 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 			if (chunk.Length == 0)
 			{
 				if (allowTimeout)
+				{
 					return [];
+				}
 
 				if (DateTime.UtcNow >= deadline)
+				{
 					throw new YardStickOneCommandException(
 					$"Timeout waiting for response app=0x{expectedApp:X2} cmd=0x{expectedCmd:X2}.");
+				}
 
 				continue;
 			}
@@ -471,26 +511,37 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 		if (sof < 0)
 		{
 			if (_recvBuffer.Count > 1024)
+			{
 				_recvBuffer.Clear();
+			}
+
 			return false;
 		}
 
 		if (sof > 0)
+		{
 			_recvBuffer.RemoveRange(0, sof);
+		}
 
 		if (_recvBuffer.Count < 5)
+		{
 			return false;
+		}
 
 		var length = _recvBuffer[3] | (_recvBuffer[4] << 8);
 		var total = 5 + length;
 		if (_recvBuffer.Count < total)
+		{
 			return false;
+		}
 
 		app = _recvBuffer[1];
 		cmd = _recvBuffer[2];
 		payload = new byte[length];
 		if (length > 0)
+		{
 			_recvBuffer.CopyTo(5, payload, 0, length);
+		}
 
 		_recvBuffer.RemoveRange(0, total);
 		return true;
@@ -506,7 +557,10 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 			if (err == ERROR_SEM_TIMEOUT && allowTimeout)
 			{
 				if (_logger.IsEnabled(LogLevel.Debug))
+				{
 					LogUsbIn(_logger, 0, string.Empty);
+				}
+
 				return [];
 			}
 
@@ -528,7 +582,10 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 	public void Dispose()
 	{
 		if (_disposed)
+		{
 			return;
+		}
+
 		_disposed = true;
 		TrySendSidle();
 		WinUsbNative.WinUsb_Free(_winUsbHandle);
@@ -560,7 +617,10 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 			for (var attempt = 0; attempt < 5; attempt++)
 			{
 				if (WinUsbNative.WinUsb_WritePipe(winUsbHandle, epOut, frame, (uint)frame.Length, out _, IntPtr.Zero))
+				{
 					break;
+				}
+
 				Thread.Sleep(100);
 			}
 
@@ -572,9 +632,13 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 			while (emptyStreak < 2)
 			{
 				if (!WinUsbNative.WinUsb_ReadPipe(winUsbHandle, epIn, buf, (uint)buf.Length, out var n, IntPtr.Zero) || n == 0)
+				{
 					emptyStreak++;
+				}
 				else
+				{
 					emptyStreak = 0;
+				}
 			}
 		}
 		catch
@@ -595,7 +659,9 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 		for (byte i = 0; i < ifaceDesc.bNumEndpoints; i++)
 		{
 			if (!WinUsbNative.WinUsb_QueryPipe(winUsbHandle, 0, i, out var pipe))
+			{
 				continue;
+			}
 
 			if (logger.IsEnabled(LogLevel.Debug))
 			{
@@ -604,12 +670,18 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 			}
 
 			if (pipe.PipeType != UsbdPipeTypeBulk)
+			{
 				continue;
+			}
 
 			if ((pipe.PipeId & 0x80) != 0)
+			{
 				epIn = pipe.PipeId;
+			}
 			else
+			{
 				epOut = pipe.PipeId;
+			}
 		}
 
 		LogEndpoints(logger, epOut, epIn);
