@@ -112,34 +112,10 @@ internal sealed partial class WinUsbTransport
 			WinUsbNative.SetupDiEnumDeviceInterfaces(devInfo, IntPtr.Zero, ref guid, index, ref ifaceData);
 			index++)
 			{
-				WinUsbNative.SetupDiGetDeviceInterfaceDetail(
-				devInfo, ref ifaceData, IntPtr.Zero, 0, out var requiredSize, IntPtr.Zero);
-
-				if (requiredSize == 0)
+				var path = ReadDeviceInterfacePath(devInfo, ref ifaceData);
+				if (!string.IsNullOrEmpty(path))
 				{
-					continue;
-				}
-
-				var buffer = Marshal.AllocHGlobal((int)requiredSize);
-				try
-				{
-					Marshal.WriteInt32(buffer, IntPtr.Size == 8 ? 8 : 6);
-
-					if (!WinUsbNative.SetupDiGetDeviceInterfaceDetail(
-					devInfo, ref ifaceData, buffer, requiredSize, out _, IntPtr.Zero))
-					{
-						continue;
-					}
-
-					var path = Marshal.PtrToStringUni(buffer + 4);
-					if (!string.IsNullOrEmpty(path))
-					{
-						results.Add(path);
-					}
-				}
-				finally
-				{
-					Marshal.FreeHGlobal(buffer);
+					results.Add(path);
 				}
 			}
 		}
@@ -149,6 +125,35 @@ internal sealed partial class WinUsbTransport
 		}
 
 		return results;
+	}
+
+	private static string? ReadDeviceInterfacePath(IntPtr devInfo, ref WinUsbNative.SP_DEVICE_INTERFACE_DATA ifaceData)
+	{
+		WinUsbNative.SetupDiGetDeviceInterfaceDetail(
+		devInfo, ref ifaceData, IntPtr.Zero, 0, out var requiredSize, IntPtr.Zero);
+
+		if (requiredSize == 0)
+		{
+			return null;
+		}
+
+		var buffer = Marshal.AllocHGlobal((int)requiredSize);
+		try
+		{
+			Marshal.WriteInt32(buffer, IntPtr.Size == 8 ? 8 : 6);
+
+			if (!WinUsbNative.SetupDiGetDeviceInterfaceDetail(
+			devInfo, ref ifaceData, buffer, requiredSize, out _, IntPtr.Zero))
+			{
+				return null;
+			}
+
+			return Marshal.PtrToStringUni(buffer + 4);
+		}
+		finally
+		{
+			Marshal.FreeHGlobal(buffer);
+		}
 	}
 
 	private static void TrySendIdleAndDrain(IntPtr winUsbHandle, byte epOut, byte epIn)
