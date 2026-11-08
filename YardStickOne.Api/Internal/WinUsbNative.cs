@@ -26,11 +26,11 @@ internal static class WinUsbNative
 
 	// WinUSB pipe policy type IDs
 	internal const uint SHORT_PACKET_TERMINATE = 0x01;  // OUT: append ZLP if multiple of maxPacketSize
-	internal const uint AUTO_CLEAR_STALL      = 0x02;  // IN:  auto-reset stalled pipe
+	internal const uint AUTO_CLEAR_STALL = 0x02;  // IN:  auto-reset stalled pipe
 	internal const uint PIPE_TRANSFER_TIMEOUT = 0x03;
-	internal const uint ALLOW_PARTIAL_READS   = 0x05;  // IN:  return short reads immediately
-	internal const uint AUTO_FLUSH            = 0x06;  // IN:  discard if partial and ALLOW_PARTIAL_READS
-	internal const uint RAW_IO                = 0x07;  // bypass WinUSB queuing
+	internal const uint ALLOW_PARTIAL_READS = 0x05;  // IN:  return short reads immediately
+	internal const uint AUTO_FLUSH = 0x06;  // IN:  discard if partial and ALLOW_PARTIAL_READS
+	internal const uint RAW_IO = 0x07;  // bypass WinUSB queuing
 
 	/// <summary>USB device interface class GUID — matches all USB devices regardless of installed driver.</summary>
 	internal static readonly Guid GUID_DEVINTERFACE_USB_DEVICE =
