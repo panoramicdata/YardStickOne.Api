@@ -48,7 +48,7 @@ internal sealed partial class LibUsbTransport : IUsbTransport
 		ObjectDisposedException.ThrowIf(_disposed, this);
 
 		var buffer = payload is { Length: > 0 }
-			? new byte[] { command }.Concat(payload).ToArray()
+			? new[] { command }.Concat(payload).ToArray()
 			: [command];
 
 		LogUsbOut(_logger, command, buffer.Length);
@@ -56,7 +56,9 @@ internal sealed partial class LibUsbTransport : IUsbTransport
 		{
 			var ec = _writer.Write(buffer, 1000, out var transferred);
 			if (ec != ErrorCode.None)
+			{
 				throw new YardStickOneCommandException($"USB write failed: {ec} (transferred {transferred}/{buffer.Length})");
+			}
 		}, cancellationToken);
 	}
 
@@ -69,7 +71,9 @@ internal sealed partial class LibUsbTransport : IUsbTransport
 			var buffer = new byte[maxLength];
 			var ec = _reader.Read(buffer, 2000, out var transferred);
 			if (ec != ErrorCode.None && ec != ErrorCode.Win32Error)
+			{
 				throw new YardStickOneCommandException($"USB read failed: {ec}");
+			}
 			LogUsbIn(_logger, transferred);
 			var result = new byte[transferred];
 			Array.Copy(buffer, result, transferred);
@@ -81,7 +85,10 @@ internal sealed partial class LibUsbTransport : IUsbTransport
 	public void Dispose()
 	{
 		if (_disposed)
+		{
 			return;
+		}
+
 		_disposed = true;
 		_writer.Dispose();
 		_reader.Dispose();

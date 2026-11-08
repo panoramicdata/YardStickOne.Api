@@ -1,0 +1,7 @@
+---
+# Exclude code that is not shipped in the NuGet package (CI packs only YardStickOne.Api.csproj).
+#  - YardStickOne.Web/**: sample Blazor oscilloscope app; IsPackable false, never published.
+#  - YardStickOne.Demo/**: console demo app; IsPackable false, never published.
+exclude_paths:
+  - "YardStickOne.Web/**"
+  - "YardStickOne.Demo/**"

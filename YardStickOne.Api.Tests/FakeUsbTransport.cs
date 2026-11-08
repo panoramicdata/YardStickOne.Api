@@ -29,7 +29,9 @@ internal sealed class FakeUsbTransport : IUsbTransport
 	public Task<byte[]> ReadResponseAsync(int maxLength = 64, CancellationToken cancellationToken = default)
 	{
 		if (_responses.TryDequeue(out var data))
+		{
 			return Task.FromResult(data);
+		}
 
 		return Task.FromResult(Array.Empty<byte>());
 	}
@@ -38,7 +40,9 @@ internal sealed class FakeUsbTransport : IUsbTransport
 	public Task<byte[]> PollIncomingFrameAsync(CancellationToken cancellationToken = default)
 	{
 		if (_responses.TryDequeue(out var data))
+		{
 			return Task.FromResult(data);
+		}
 
 		return Task.FromResult(Array.Empty<byte>());
 	}

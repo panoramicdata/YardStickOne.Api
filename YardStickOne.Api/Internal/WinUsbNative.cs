@@ -1,5 +1,6 @@
-#pragma warning disable SYSLIB1054 // Use LibraryImportAttribute — DllImport used intentionally for complex struct marshalling
+#pragma warning disable SYSLIB1054 // Use LibraryImportAttribute: DllImport used intentionally for complex struct marshalling
 
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
@@ -26,17 +27,18 @@ internal static class WinUsbNative
 
 	// WinUSB pipe policy type IDs
 	internal const uint SHORT_PACKET_TERMINATE = 0x01;  // OUT: append ZLP if multiple of maxPacketSize
-	internal const uint AUTO_CLEAR_STALL      = 0x02;  // IN:  auto-reset stalled pipe
+	internal const uint AUTO_CLEAR_STALL = 0x02;  // IN:  auto-reset stalled pipe
 	internal const uint PIPE_TRANSFER_TIMEOUT = 0x03;
-	internal const uint ALLOW_PARTIAL_READS   = 0x05;  // IN:  return short reads immediately
-	internal const uint AUTO_FLUSH            = 0x06;  // IN:  discard if partial and ALLOW_PARTIAL_READS
-	internal const uint RAW_IO                = 0x07;  // bypass WinUSB queuing
+	internal const uint ALLOW_PARTIAL_READS = 0x05;  // IN:  return short reads immediately
+	internal const uint AUTO_FLUSH = 0x06;  // IN:  discard if partial and ALLOW_PARTIAL_READS
+	internal const uint RAW_IO = 0x07;  // bypass WinUSB queuing
 
-	/// <summary>USB device interface class GUID — matches all USB devices regardless of installed driver.</summary>
+	/// <summary>USB device interface class GUID; matches all USB devices regardless of installed driver.</summary>
 	internal static readonly Guid GUID_DEVINTERFACE_USB_DEVICE =
 		new("A5DCBF10-6530-11D2-901F-00C04FB951ED");
 
 	[StructLayout(LayoutKind.Sequential)]
+	[SuppressMessage("Minor Code Smell", "S3898", Justification = "P/Invoke marshalling struct; it is never compared, so IEquatable would be unused code.")]
 	internal struct SP_DEVICE_INTERFACE_DATA
 	{
 		public uint cbSize;
@@ -46,6 +48,7 @@ internal static class WinUsbNative
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 1)]
+	[SuppressMessage("Minor Code Smell", "S3898", Justification = "P/Invoke marshalling struct; it is never compared, so IEquatable would be unused code.")]
 	internal struct USB_INTERFACE_DESCRIPTOR
 	{
 		public byte bLength;
@@ -60,6 +63,7 @@ internal static class WinUsbNative
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
+	[SuppressMessage("Minor Code Smell", "S3898", Justification = "P/Invoke marshalling struct; it is never compared, so IEquatable would be unused code.")]
 	internal struct WINUSB_PIPE_INFORMATION
 	{
 		public int PipeType;       // USB_PIPE_TYPE enum
