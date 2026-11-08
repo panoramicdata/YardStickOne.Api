@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -34,6 +35,7 @@ public sealed partial class YardStickOneClient : IYardStickOneClient
 	/// using the supplied options and logger.
 	/// </summary>
 	/// <exception cref="YardStickOneNotFoundException">No device is attached.</exception>
+	[SuppressMessage("Major Code Smell", "S2360", Justification = "Published public constructor; removing the optional parameters would break existing callers such as new YardStickOneClient().")]
 	public YardStickOneClient(
 	YardStickOneClientOptions? options = null,
 	ILogger<YardStickOneClient>? logger = null)
@@ -62,6 +64,7 @@ public sealed partial class YardStickOneClient : IYardStickOneClient
 	}
 
 	/// <inheritdoc/>
+	[SuppressMessage("Major Code Smell", "S2360", Justification = "Implements the published IYardStickOneClient contract; an optional CancellationToken is the .NET convention and removing it would break existing callers.")]
 	public async Task ConfigureAsync(
 	double frequencyHz,
 	Modulation modulation,
@@ -74,7 +77,7 @@ public sealed partial class YardStickOneClient : IYardStickOneClient
 
 		// Ping with retries: after abrupt stop/start cycles the firmware may still be
 		// draining RX state, causing a transient timeout on the first attempt.
-		for (var attempt = 1; ; attempt++)
+		for (var attempt = 1; attempt <= PingRetryCount; attempt++)
 		{
 			try
 			{
@@ -117,6 +120,7 @@ public sealed partial class YardStickOneClient : IYardStickOneClient
 	}
 
 	/// <inheritdoc/>
+	[SuppressMessage("Major Code Smell", "S2360", Justification = "Implements the published IYardStickOneClient contract; an optional CancellationToken is the .NET convention and removing it would break existing callers.")]
 	public async Task<RfSignal> ReceiveAsync(CancellationToken cancellationToken = default)
 	{
 		ObjectDisposedException.ThrowIf(_disposed, this);
@@ -168,6 +172,7 @@ public sealed partial class YardStickOneClient : IYardStickOneClient
 	}
 
 	/// <inheritdoc/>
+	[SuppressMessage("Major Code Smell", "S2360", Justification = "Implements the published IYardStickOneClient contract; an optional CancellationToken is the .NET convention and removing it would break existing callers.")]
 	public async Task TransmitAsync(RfSignal signal, CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(signal);
@@ -185,6 +190,7 @@ public sealed partial class YardStickOneClient : IYardStickOneClient
 	}
 
 	/// <inheritdoc/>
+	[SuppressMessage("Major Code Smell", "S2360", Justification = "Implements the published IYardStickOneClient contract; an optional CancellationToken is the .NET convention and removing it would break existing callers.")]
 	public async Task TransmitAsync(byte[] data, CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(data);
@@ -199,6 +205,7 @@ public sealed partial class YardStickOneClient : IYardStickOneClient
 	}
 
 	/// <inheritdoc/>
+	[SuppressMessage("Major Code Smell", "S2360", Justification = "Implements the published IYardStickOneClient contract; an optional CancellationToken is the .NET convention and removing it would break existing callers.")]
 	public Task ResetAsync(CancellationToken cancellationToken = default)
 	{
 		ObjectDisposedException.ThrowIf(_disposed, this);
@@ -207,6 +214,7 @@ public sealed partial class YardStickOneClient : IYardStickOneClient
 	}
 
 	/// <inheritdoc/>
+	[SuppressMessage("Major Code Smell", "S2360", Justification = "Implements the published IYardStickOneClient contract; an optional CancellationToken is the .NET convention and removing it would break existing callers.")]
 	public async IAsyncEnumerable<RfSignal> StreamAsync(
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
@@ -221,7 +229,7 @@ public sealed partial class YardStickOneClient : IYardStickOneClient
 			while (!cancellationToken.IsCancellationRequested)
 			{
 				// In streaming RX mode the firmware pushes frames spontaneously on the IN pipe.
-				// Do NOT send a NicRecv OUT command — the device will ignore / reject it while streaming.
+				// Do NOT send a NicRecv OUT command; the device will ignore / reject it while streaming.
 				var data = await _transport
 					.PollIncomingFrameAsync(cancellationToken)
 					.ConfigureAwait(false);
@@ -265,12 +273,12 @@ public sealed partial class YardStickOneClient : IYardStickOneClient
 	{
 		// The CC1111 frequency register is 3 bytes derived from: freq / (26e6 / 2^16)
 		var freqWord = (uint)(frequencyHz / (26_000_000.0 / 65536.0));
-		var payload = new byte[]
-		{
-(byte)((freqWord >> 16) & 0xFF),
-(byte)((freqWord >> 8) & 0xFF),
-(byte)(freqWord & 0xFF),
-		};
+		byte[] payload =
+		[
+			(byte)((freqWord >> 16) & 0xFF),
+			(byte)((freqWord >> 8) & 0xFF),
+			(byte)(freqWord & 0xFF),
+		];
 		return _transport.SendCommandAsync(RfCatCommands.SetFreq, payload, cancellationToken);
 	}
 

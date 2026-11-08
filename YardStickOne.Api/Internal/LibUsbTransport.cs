@@ -48,7 +48,7 @@ internal sealed partial class LibUsbTransport : IUsbTransport
 		ObjectDisposedException.ThrowIf(_disposed, this);
 
 		var buffer = payload is { Length: > 0 }
-			? new byte[] { command }.Concat(payload).ToArray()
+			? new[] { command }.Concat(payload).ToArray()
 			: [command];
 
 		LogUsbOut(_logger, command, buffer.Length);

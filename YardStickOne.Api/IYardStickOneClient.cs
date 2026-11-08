@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using YardStickOne.Api.Models;
 
@@ -30,6 +31,7 @@ public interface IYardStickOneClient : IDisposable
 	/// <param name="modulation">Modulation scheme.</param>
 	/// <param name="baudRate">Baud rate in symbols per second.</param>
 	/// <param name="cancellationToken">Cancellation token.</param>
+	[SuppressMessage("Major Code Smell", "S2360", Justification = "Published public interface; an optional CancellationToken is the .NET convention and removing it would break existing callers and implementers.")]
 	Task ConfigureAsync(
 		double frequencyHz,
 		Modulation modulation,
@@ -41,6 +43,7 @@ public interface IYardStickOneClient : IDisposable
 	/// </summary>
 	/// <param name="cancellationToken">Cancellation token.</param>
 	/// <returns>The captured <see cref="RfSignal"/>.</returns>
+	[SuppressMessage("Major Code Smell", "S2360", Justification = "Published public interface; an optional CancellationToken is the .NET convention and removing it would break existing callers and implementers.")]
 	Task<RfSignal> ReceiveAsync(CancellationToken cancellationToken = default);
 
 	/// <summary>
@@ -48,6 +51,7 @@ public interface IYardStickOneClient : IDisposable
 	/// </summary>
 	/// <param name="signal">The signal to transmit.</param>
 	/// <param name="cancellationToken">Cancellation token.</param>
+	[SuppressMessage("Major Code Smell", "S2360", Justification = "Published public interface; an optional CancellationToken is the .NET convention and removing it would break existing callers and implementers.")]
 	Task TransmitAsync(RfSignal signal, CancellationToken cancellationToken = default);
 
 	/// <summary>
@@ -55,18 +59,21 @@ public interface IYardStickOneClient : IDisposable
 	/// </summary>
 	/// <param name="data">Raw bytes to transmit.</param>
 	/// <param name="cancellationToken">Cancellation token.</param>
+	[SuppressMessage("Major Code Smell", "S2360", Justification = "Published public interface; an optional CancellationToken is the .NET convention and removing it would break existing callers and implementers.")]
 	Task TransmitAsync(byte[] data, CancellationToken cancellationToken = default);
 
 	/// <summary>
 	/// Resets the device to its default state.
 	/// </summary>
 	/// <param name="cancellationToken">Cancellation token.</param>
+	[SuppressMessage("Major Code Smell", "S2360", Justification = "Published public interface; an optional CancellationToken is the .NET convention and removing it would break existing callers and implementers.")]
 	Task ResetAsync(CancellationToken cancellationToken = default);
 
 	/// <summary>
 	/// Continuously streams raw RF samples, keeping the radio in RX mode until the token is cancelled.
 	/// Each yielded <see cref="RfSignal"/> contains one FIFO burst from the CC1111.
 	/// </summary>
-	/// <param name="cancellationToken">Cancellation token — cancel to stop the stream and return to idle.</param>
+	/// <param name="cancellationToken">Cancellation token; cancel to stop the stream and return to idle.</param>
+	[SuppressMessage("Major Code Smell", "S2360", Justification = "Published public interface; an optional CancellationToken is the .NET convention and removing it would break existing callers and implementers.")]
 	IAsyncEnumerable<RfSignal> StreamAsync(CancellationToken cancellationToken = default);
 }
