@@ -115,10 +115,17 @@
         Capture.CaptureFaulted += OnCaptureFaulted;
 
         _selfRef = DotNetObjectReference.Create(this);
-        _osc = await JS.InvokeAsync<IJSObjectReference>(
-            "import", "./js/oscilloscope.js");
+        try
+        {
+            _osc = await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./js/oscilloscope.js");
 
-        await _osc.InvokeVoidAsync("init", _canvas, _selfRef);
+            await _osc.InvokeVoidAsync("init", _canvas, _selfRef);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit closed before the first render finished, so there is no display to initialise.
+        }
     }
 
     private async Task StartCaptureAsync()
@@ -162,7 +169,6 @@
         finally
         {
             _startInProgress = false;
-            StateHasChanged();
         }
     }
 
@@ -170,24 +176,49 @@
     {
         await Capture.StopAsync();
         if (_osc is not null)
-            await _osc.InvokeVoidAsync("disconnectHub");
+        {
+            try
+            {
+                await _osc.InvokeVoidAsync("disconnectHub");
+            }
+            catch (JSDisconnectedException)
+            {
+                // The circuit is gone, so there is nothing left to disconnect.
+            }
+        }
         _capturing = false;
         _statusMessage = "Capture stopped.";
-        StateHasChanged();
     }
 
     private async Task ClearAsync()
     {
         if (_osc is not null)
-            await _osc.InvokeVoidAsync("clear");
+        {
+            try
+            {
+                await _osc.InvokeVoidAsync("clear");
+            }
+            catch (JSDisconnectedException)
+            {
+                // The circuit is gone, so there is nothing left to clear.
+            }
+        }
         _hasSelection = false;
-        StateHasChanged();
     }
 
     private async Task PlaybackSelectionAsync()
     {
         if (_osc is null) return;
-        var data = await _osc.InvokeAsync<byte[]>("getSelectionData");
+        byte[]? data;
+        try
+        {
+            data = await _osc.InvokeAsync<byte[]>("getSelectionData");
+        }
+        catch (JSDisconnectedException)
+        {
+            return;
+        }
+
         if (data is { Length: > 0 })
         {
             try
@@ -199,7 +230,6 @@
             {
                 _statusMessage = $"Transmit failed: {ex.Message}";
             }
-            StateHasChanged();
         }
     }
 
@@ -213,7 +243,16 @@
     private async Task SaveSelectionAsync()
     {
         if (_osc is null || string.IsNullOrWhiteSpace(_saveName)) return;
-        var data = await _osc.InvokeAsync<byte[]>("getSelectionData");
+        byte[]? data;
+        try
+        {
+            data = await _osc.InvokeAsync<byte[]>("getSelectionData");
+        }
+        catch (JSDisconnectedException)
+        {
+            return;
+        }
+
         if (data is { Length: > 0 })
         {
             var signal = new YardStickOne.Api.Models.RfSignal
@@ -227,7 +266,6 @@
             await SavedCaptures.SaveAsync(_saveName, signal);
             _statusMessage  = $"Saved '{_saveName}'.";
             _showSaveDialog = false;
-            StateHasChanged();
         }
     }
 
