@@ -214,10 +214,12 @@ public sealed class YardStickOneClientBehaviourTests
 		using var client = CreateClient(transport);
 		using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
 
+		var received = 0;
 		var consume = async () =>
 		{
 			await foreach (var _ in client.StreamAsync(cts.Token))
 			{
+				received++;
 			}
 		};
 
