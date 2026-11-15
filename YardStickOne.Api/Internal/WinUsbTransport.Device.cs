@@ -68,7 +68,7 @@ internal sealed partial class WinUsbTransport
 		WinUsbNative.WinUsb_SetPipePolicy(winUsbHandle, epIn, WinUsbNative.PIPE_TRANSFER_TIMEOUT, 4, ref timeout1000);
 
 		LogOpened(logger, options.VendorId, options.ProductId, path);
-		return new WinUsbTransport(deviceHandle, winUsbHandle, epOut, epIn, logger);
+		return new WinUsbTransport(new NativeWinUsbPipe(deviceHandle, winUsbHandle), epOut, epIn, logger);
 	}
 
 	/// <summary>Returns the device path for the first matching VID/PID, or null if not found.</summary>

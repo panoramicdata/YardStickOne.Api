@@ -1,5 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using YardStickOne.Api.Exceptions;
 
@@ -11,11 +9,9 @@ namespace YardStickOne.Api.Internal;
 /// so it works with both the Windows auto-install WinUSB path (MS_COMP_WINUSB OS descriptor)
 /// and Zadig-installed devices, with no LibUsbDotNet dependency.
 /// </summary>
-[SuppressMessage("Major Bug", "S3453", Justification = "Instances are created only through the static Open factory in WinUsbTransport.Device.cs.")]
 internal sealed partial class WinUsbTransport : IUsbTransport
 {
-	private readonly Microsoft.Win32.SafeHandles.SafeFileHandle _deviceHandle;
-	private readonly IntPtr _winUsbHandle;
+	private readonly IWinUsbPipe _pipe;
 	private readonly byte _endpointOut;
 	private readonly byte _endpointIn;
 	private readonly ILogger _logger;
@@ -59,15 +55,13 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 	private const ushort RegPktCtrl0 = 0xDF08;   // packet control: bits[1:0] = LENGTH_CONFIG
 	private const double CrystalHz = 24_000_000.0;
 
-	private WinUsbTransport(
-	Microsoft.Win32.SafeHandles.SafeFileHandle deviceHandle,
-	IntPtr winUsbHandle,
+	internal WinUsbTransport(
+	IWinUsbPipe pipe,
 	byte endpointOut,
 	byte endpointIn,
 	ILogger logger)
 	{
-		_deviceHandle = deviceHandle;
-		_winUsbHandle = winUsbHandle;
+		_pipe = pipe;
 		_endpointOut = endpointOut;
 		_endpointIn = endpointIn;
 		_logger = logger;
@@ -156,10 +150,8 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 			LogUsbOut(_logger, buffer[1], buffer.Length, hex);
 		}
 
-		if (!WinUsbNative.WinUsb_WritePipe(_winUsbHandle, _endpointOut,
-		buffer, (uint)buffer.Length, out var transferred, IntPtr.Zero))
+		if (!_pipe.Write(_endpointOut, buffer, out var transferred, out var err))
 		{
-			var err = Marshal.GetLastWin32Error();
 			throw new YardStickOneCommandException(
 			$"USB write failed: Win32 0x{err:X8} (transferred {transferred}/{buffer.Length})");
 		}
@@ -257,10 +249,8 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 	private byte[] ReadPipeRaw(bool allowTimeout)
 	{
 		var buffer = new byte[512];
-		if (!WinUsbNative.WinUsb_ReadPipe(_winUsbHandle, _endpointIn,
-		buffer, (uint)buffer.Length, out var transferred, IntPtr.Zero))
+		if (!_pipe.Read(_endpointIn, buffer, out var transferred, out var err))
 		{
-			var err = Marshal.GetLastWin32Error();
 			if (err == ERROR_SEM_TIMEOUT && allowTimeout)
 			{
 				if (_logger.IsEnabled(LogLevel.Debug))
@@ -295,8 +285,7 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 
 		_disposed = true;
 		TrySendSidle();
-		WinUsbNative.WinUsb_Free(_winUsbHandle);
-		_deviceHandle.Dispose();
+		_pipe.Dispose();
 	}
 
 	private void TrySendSidle()
@@ -304,9 +293,9 @@ internal sealed partial class WinUsbTransport : IUsbTransport
 		try
 		{
 			byte[] frame = [AppSystem, SysCmdRfMode, 1, 0, RfstSidle];
-			WinUsbNative.WinUsb_WritePipe(_winUsbHandle, _endpointOut, frame, (uint)frame.Length, out _, IntPtr.Zero);
+			_pipe.Write(_endpointOut, frame, out _, out _);
 			var buf = new byte[64];
-			WinUsbNative.WinUsb_ReadPipe(_winUsbHandle, _endpointIn, buf, (uint)buf.Length, out _, IntPtr.Zero);
+			_pipe.Read(_endpointIn, buf, out _, out _);
 		}
 		catch
 		{
